@@ -1,0 +1,3 @@
+# Ignore backup git directories
+.git.bak
+

@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dinari — fintech design system. White + red, Stripe/Revolut feel. All HSL. */
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 25% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 25% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 25% 11%;
+
+    /* Brand red */
+    --primary: 354 78% 53%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 354 95% 65%;
+    --primary-soft: 354 90% 96%;
+
+    --secondary: 220 15% 96%;
+    --secondary-foreground: 222 25% 11%;
+
+    --muted: 220 15% 97%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 354 90% 96%;
+    --accent-foreground: 354 78% 40%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 65% 95%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 30 50% 15%;
+    --warning-soft: 45 100% 95%;
+
+    --info: 217 91% 55%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 217 95% 96%;
+
+    --destructive-soft: 0 90% 96%;
+
+    --border: 220 15% 92%;
+    --input: 220 15% 92%;
+    --ring: 354 78% 53%;
+
+    --radius: 0.875rem;
+
+    /* Surfaces */
+    --surface: 220 30% 99%;
+    --surface-elevated: 0 0% 100%;
+
+    /* Gradients */
+    --gradient-hero: radial-gradient(ellipse 80% 50% at 50% -10%, hsl(354 90% 96%), transparent 60%);
+    --gradient-primary: linear-gradient(135deg, hsl(354 78% 53%), hsl(354 95% 65%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 30% 99%));
+    --gradient-radial-red: radial-gradient(circle at 30% 20%, hsl(354 95% 65% / 0.18), transparent 50%);
+    --gradient-balance: linear-gradient(135deg, hsl(354 78% 53%) 0%, hsl(354 85% 60%) 50%, hsl(14 90% 60%) 100%);
+    --gradient-balance-soft: linear-gradient(135deg, hsl(354 90% 97%) 0%, hsl(0 0% 100%) 100%);
+
+    /* Shadows */
+    --shadow-xs: 0 1px 2px 0 hsl(222 25% 11% / 0.04);
+    --shadow-sm: 0 2px 4px -1px hsl(222 25% 11% / 0.06), 0 1px 2px hsl(222 25% 11% / 0.04);
+    --shadow-md: 0 8px 24px -8px hsl(222 25% 11% / 0.08), 0 2px 6px -2px hsl(222 25% 11% / 0.04);
+    --shadow-lg: 0 24px 48px -16px hsl(222 25% 11% / 0.12), 0 8px 16px -8px hsl(222 25% 11% / 0.06);
+    --shadow-glow: 0 20px 60px -20px hsl(354 78% 53% / 0.45);
+    --shadow-ring: 0 0 0 4px hsl(354 78% 53% / 0.12);
+
+    /* Motion */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-base: all 0.25s var(--ease-out);
+
+    /* Sidebar (dashboard) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 20% 30%;
+    --sidebar-primary: 354 78% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 354 90% 97%;
+    --sidebar-accent-foreground: 354 78% 40%;
+    --sidebar-border: 220 15% 93%;
+    --sidebar-ring: 354 78% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight;
+  }
+}
+
+@layer utilities {
+  .bg-hero-glow {
+    background-image: var(--gradient-hero);
+  }
+  .bg-gradient-primary {
+    background-image: var(--gradient-primary);
+  }
+  .bg-gradient-card {
+    background-image: var(--gradient-card);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+  .shadow-elevated {
+    box-shadow: var(--shadow-lg);
+  }
+  .shadow-soft {
+    box-shadow: var(--shadow-md);
+  }
+  .bg-gradient-balance {
+    background-image: var(--gradient-balance);
+  }
+  .bg-gradient-balance-soft {
+    background-image: var(--gradient-balance-soft);
+  }
+  .grid-pattern {
+    background-image:
+      linear-gradient(hsl(220 15% 92% / 0.6) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(220 15% 92% / 0.6) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, black, transparent 70%);
+  }
+}
