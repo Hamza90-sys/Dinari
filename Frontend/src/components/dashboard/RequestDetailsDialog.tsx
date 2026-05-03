@@ -7,13 +7,17 @@ import {
 } from "@/components/ui/dialog";
 import { StatusBadge, type RequestStatus } from "./StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Check, Clock, FileText, ImageIcon, Copy, CreditCard } from "lucide-react";
+import { Check, Clock, FileText, ImageIcon, Copy, CreditCard, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { DinariRequest } from "@/types/domain";
 import { formatDate } from "@/lib/format";
 import { useRequests } from "@/hooks/use-requests";
 import { useAuth } from "@/hooks/use-auth";
+import { paymentsService } from "@/services/payments.service";
+import { paymentSessionService } from "@/services/payment-session.service";
 
 export type RequestRecord = DinariRequest;
 
@@ -53,8 +57,10 @@ export const RequestDetailsDialog = ({
   onOpenChange: (o: boolean) => void;
   balance?: number;
 }) => {
+  const navigate = useNavigate();
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const { payRequest, setRequestStatus } = useRequests();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   if (!request) return null;
 
   const reached = reachedIndex(request.status);
@@ -65,7 +71,36 @@ export const RequestDetailsDialog = ({
   };
 
   const amount = request.amountTND ?? 50;
-  const canPay = request.status === "Awaiting Payment" && (balance ?? 0) >= amount;
+  const canPay = request.status === "Awaiting Payment";
+
+  const handlePayNow = async () => {
+    if (!user || !canPay) return;
+
+    try {
+      setPaymentLoading(true);
+
+      // Create payment session
+      const session = await paymentSessionService.createSession({
+        requestId: request.dbId,
+        requestCode: request.id,
+        userId: user.id,
+        amount: amount,
+      });
+
+      toast.success("Payment session created");
+
+      // Generate checkout URL and redirect
+      const checkoutUrl = await paymentSessionService.generateCheckoutUrl(session.id);
+      navigate(checkoutUrl.replace(window.location.origin, ""));
+    } catch (err) {
+      console.error("Payment session creation error:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create payment session"
+      );
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
 
   const pay = async () => {
     try {
@@ -81,6 +116,17 @@ export const RequestDetailsDialog = ({
     await setRequestStatus(request.id, "Completed");
     toast.success("Request marked as completed");
     onOpenChange(false);
+  };
+
+  const openProof = async () => {
+    if (!request.proofUrl) return;
+
+    try {
+      const signedUrl = await paymentsService.createProofPreviewUrl(request.proofUrl);
+      window.open(signedUrl, "_blank", "noopener,noreferrer");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Could not open proof.");
+    }
   };
 
   return (
@@ -154,7 +200,13 @@ export const RequestDetailsDialog = ({
                   {request.paymentDate ? `Uploaded by Dinari - ${formatDate(request.paymentDate)}` : "Awaiting payment confirmation"}
                 </p>
               </div>
-              <Button variant="outline" size="sm" className="rounded-full" disabled={!request.proofUrl}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                disabled={!request.proofUrl}
+                onClick={openProof}
+              >
                 View
               </Button>
             </div>
@@ -182,9 +234,23 @@ export const RequestDetailsDialog = ({
 
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
             {request.status === "Awaiting Payment" && (
-              <Button variant="hero" size="sm" onClick={pay} disabled={!canPay}>
-                <CreditCard className="h-4 w-4" />
-                {canPay ? `Pay ${amount.toFixed(2)} TND` : "Top up to pay"}
+              <Button 
+                variant="hero" 
+                size="sm" 
+                onClick={handlePayNow} 
+                disabled={paymentLoading || !canPay}
+              >
+                {paymentLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Creating session...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-4 w-4" />
+                    Pay Now {amount.toFixed(2)} TND
+                  </>
+                )}
               </Button>
             )}
             {isAdmin && request.status === "Processing" && (

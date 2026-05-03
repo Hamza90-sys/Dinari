@@ -20,7 +20,6 @@ import { AlertBar } from "@/components/dashboard/AlertBar";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { RequestDetailsDialog } from "@/components/dashboard/RequestDetailsDialog";
-import { FilterBar, type FilterValue } from "@/components/dashboard/FilterBar";
 import { MoneyDialog } from "@/components/dashboard/MoneyDialogs";
 import {
   DropdownMenu,
@@ -31,7 +30,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useRequests } from "@/hooks/use-requests";
 import { useUsersData } from "@/hooks/use-users-data";
-import { usePayments } from "@/hooks/use-payments";
+import { useWallet } from "@/hooks/use-wallet";
 import { formatDate } from "@/lib/format";
 
 const Dashboard = () => {
@@ -39,9 +38,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { requests } = useRequests();
   const { subscriptions, profile: dbProfile } = useUsersData();
-  const { payments } = usePayments();
-
-  const [filters, setFilters] = useState<FilterValue>({ statuses: [], services: [] });
+  const { paymentRequests, walletTransactions } = useWallet();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moneyMode, setMoneyMode] = useState<"topup" | "withdraw" | null>(null);
 
@@ -57,43 +54,39 @@ const Dashboard = () => {
   const balance = dbProfile?.balanceTnd ?? profile?.balanceTnd ?? 0;
   const ownedRequests = useMemo(() => requests.filter((r) => r.ownerId === userId), [requests, userId]);
   const ownedSubscriptions = useMemo(() => subscriptions.filter((s) => s.ownerId === userId), [subscriptions, userId]);
-  const ownedPayments = useMemo(() => payments.filter((p) => p.ownerId === userId), [payments, userId]);
-
-  const filteredPayments = useMemo(() => {
-    return ownedPayments.filter((p) => {
-      const statusToken = p.requestId ? "Completed" : p.status;
-      const statusOk = filters.statuses.length === 0 || filters.statuses.includes(statusToken);
-      const serviceValue = p.requestId ? p.requestId : p.method;
-      const serviceOk =
-        filters.services.length === 0 || filters.services.some((s) => serviceValue.toLowerCase().includes(s.toLowerCase()));
-      return statusOk && serviceOk;
-    });
-  }, [filters, ownedPayments]);
+  const ownedPaymentRequests = useMemo(
+    () => paymentRequests.filter((p) => p.userId === userId),
+    [paymentRequests, userId],
+  );
+  const ownedTransactions = useMemo(
+    () => walletTransactions.filter((t) => t.userId === userId),
+    [walletTransactions, userId],
+  );
 
   const awaitingRequest = ownedRequests.find((r) => r.status === "Awaiting Payment");
   const lastTopUp = useMemo(() => {
-    const t = ownedPayments.find((p) => !p.requestId && p.method !== "Withdrawal");
+    const t = ownedTransactions.find((tx) => tx.type === "top_up");
     return t ? `${t.amountTND} TND on ${formatDate(t.createdAt)}` : undefined;
-  }, [ownedPayments]);
+  }, [ownedTransactions]);
 
   const totalPaid = useMemo(
     () =>
-      ownedPayments
-        .filter((p) => p.requestId || p.method === "Withdrawal")
-        .reduce((sum, p) => sum + p.amountTND, 0),
-    [ownedPayments],
+      ownedTransactions
+        .filter((tx) => tx.type === "service_purchase")
+        .reduce((sum, tx) => sum + tx.amountTND, 0),
+    [ownedTransactions],
   );
 
   const monthSpend = useMemo(() => {
     const now = new Date();
-    return ownedPayments
-      .filter((p) => {
-        if (!p.requestId) return false;
-        const d = new Date(p.createdAt);
+    return ownedTransactions
+      .filter((tx) => {
+        if (tx.type !== "service_purchase") return false;
+        const d = new Date(tx.createdAt);
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       })
-      .reduce((sum, p) => sum + p.amountTND, 0);
-  }, [ownedPayments]);
+      .reduce((sum, tx) => sum + tx.amountTND, 0);
+  }, [ownedTransactions]);
 
   const initials =
     (profile?.fullName ?? user?.email ?? "?")
@@ -259,36 +252,72 @@ const Dashboard = () => {
               </Card>
             </div>
 
-            <div className="mt-6">
-              <Card title="Payment history" action={<FilterBar value={filters} onChange={setFilters} />}>
-                {filteredPayments.length === 0 ? (
+            <div className="mt-6 grid gap-6 lg:grid-cols-3">
+              <Card
+                title="Top-up requests"
+                className="lg:col-span-1"
+                action={
+                  <Button variant="outline" size="sm" className="rounded-full" onClick={() => setMoneyMode("topup")}
+                  >
+                    <ArrowDownRight className="h-3.5 w-3.5" /> Add funds
+                  </Button>
+                }
+              >
+                {ownedPaymentRequests.length === 0 ? (
+                  <EmptyState
+                    icon={ArrowDownRight}
+                    title="No top-up requests yet"
+                    description="Send a manual top-up and we'll verify it quickly."
+                    ctaLabel="Top up"
+                    ctaTo={undefined}
+                  />
+                ) : (
+                  <ul className="space-y-3">
+                    {ownedPaymentRequests.slice(0, 6).map((req) => (
+                      <li key={req.id} className="rounded-2xl border border-border bg-muted/20 p-4">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">{req.amountTND.toFixed(2)} TND</p>
+                          <TopUpStatusBadge status={req.status} />
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{req.method} · {formatDate(req.createdAt)}</p>
+                        {req.adminNote && (
+                          <p className="mt-2 text-xs text-foreground">Admin note: {req.adminNote}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+
+              <Card title="Wallet activity" className="lg:col-span-2">
+                {ownedTransactions.length === 0 ? (
                   <EmptyState
                     icon={ArrowUpRight}
-                    title={ownedPayments.length === 0 ? "No payments yet" : "No matching payments"}
-                    description={
-                      ownedPayments.length === 0
-                        ? "Top up your balance or pay a request and you'll see it here."
-                        : "Try removing some filters to see more results."
-                    }
-                    ctaLabel={ownedPayments.length === 0 ? "Top up balance" : undefined}
+                    title="No wallet activity yet"
+                    description="Top up your balance or pay a request and you'll see it here."
+                    ctaLabel="Top up balance"
                     ctaTo={undefined}
                   />
                 ) : (
                   <DataTable
-                    headers={["ID", "Date", "Reference", "Amount", "Status"]}
-                    rows={filteredPayments.map((p) => [
-                      <span className="font-mono text-xs text-muted-foreground">{p.id.slice(0, 8)}</span>,
-                      <span className="text-muted-foreground">{formatDate(p.createdAt)}</span>,
-                      <span className="font-medium text-foreground">{p.requestId || p.method}</span>,
+                    headers={["Type", "Date", "Amount", "Balance", "Reference"]}
+                    rows={ownedTransactions.map((tx) => [
+                      <span className="font-medium text-foreground">
+                        {tx.description || formatTransactionType(tx.type)}
+                      </span>,
+                      <span className="text-muted-foreground">{formatDate(tx.createdAt)}</span>,
                       <span className="inline-flex items-center gap-1 font-medium text-foreground">
-                        {!p.requestId && p.method !== "Withdrawal" ? (
+                        {tx.type === "top_up" ? (
                           <ArrowDownRight className="h-3.5 w-3.5 text-success" />
                         ) : (
                           <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
                         )}
-                        {p.amountTND} TND
+                        {tx.amountTND.toFixed(2)} TND
                       </span>,
-                      <StatusBadge status={p.requestId ? "Completed" : p.status} />,
+                      <span className="text-muted-foreground">{tx.balanceAfter.toFixed(2)} TND</span>,
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {tx.requestId ? tx.requestId.slice(0, 8) : "-"}
+                      </span>,
                     ])}
                   />
                 )}
@@ -417,5 +446,33 @@ const DataTable = ({
     </table>
   </div>
 );
+
+const formatTransactionType = (value: string) => {
+  switch (value) {
+    case "top_up":
+      return "Top up approved";
+    case "service_purchase":
+      return "Service purchase";
+    case "refund":
+      return "Refund";
+    case "adjustment":
+      return "Balance adjustment";
+    default:
+      return value;
+  }
+};
+
+const TopUpStatusBadge = ({ status }: { status: "pending" | "approved" | "rejected" }) => {
+  const styles = {
+    pending: "bg-warning-soft text-warning ring-1 ring-warning/30",
+    approved: "bg-success-soft text-success ring-1 ring-success/20",
+    rejected: "bg-destructive-soft text-destructive ring-1 ring-destructive/20",
+  };
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${styles[status]}`}>
+      {status}
+    </span>
+  );
+};
 
 export default Dashboard;

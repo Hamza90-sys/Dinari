@@ -19,6 +19,26 @@ const mapProfile = (row: {
   createdAt: row.created_at,
 });
 
+const withTimeout = async <T>(label: string, ms: number, run: (signal: AbortSignal) => Promise<T>) => {
+  const controller = new AbortController();
+  let timeoutId: number | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      controller.abort();
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([run(controller.signal), timeoutPromise]);
+  } catch (error) {
+    console.error(`❌ [auth.service] ${label} failed:`, error);
+    throw error;
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+};
+
 export const authService = {
   async signUp(input: { email: string; password: string; fullName?: string }) {
     assertSupabaseConfigured();
@@ -33,7 +53,10 @@ export const authService = {
     });
     if (error) throw new Error(error.message);
 
-    if (data.user) {
+    // Only attempt a client-side profile upsert when a session exists.
+    // If email confirmation is required, there is no authenticated user yet,
+    // and RLS correctly blocks inserts into profiles from the client.
+    if (data.user && data.session) {
       await authService.ensureProfile(data.user, input.fullName ?? null);
     }
 
@@ -48,8 +71,10 @@ export const authService = {
   },
 
   async signOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw new Error(error.message);
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error && !/session|refresh token/i.test(error.message)) {
+      throw new Error(error.message);
+    }
   },
 
   async getSession() {
@@ -65,17 +90,21 @@ export const authService = {
   },
 
   async getProfile(userId: string) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, role, balance_tnd, created_at")
-      .eq("id", userId)
-      .maybeSingle();
+    const { data, error } = await withTimeout("getProfile", 7000, (signal) =>
+      supabase
+        .from("profiles")
+        .select("id, email, full_name, role, balance_tnd, created_at")
+        .eq("id", userId)
+        .maybeSingle()
+        .abortSignal(signal),
+    );
 
     if (error) throw new Error(error.message);
     return data ? mapProfile(data) : null;
   },
 
   async ensureProfile(user: User, fullName?: string | null) {
+    console.log("👤 [auth.service] Ensuring profile for:", user.id);
     const existing = await authService.getProfile(user.id);
     if (existing) return existing;
 
@@ -87,11 +116,14 @@ export const authService = {
       balance_tnd: 0,
     };
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .upsert(payload)
-      .select("id, email, full_name, role, balance_tnd, created_at")
-      .single();
+    const { data, error } = await withTimeout("upsertProfile", 7000, (signal) =>
+      supabase
+        .from("profiles")
+        .upsert(payload)
+        .select("id, email, full_name, role, balance_tnd, created_at")
+        .single()
+        .abortSignal(signal),
+    );
 
     return mapProfile(unwrap(data, error));
   },

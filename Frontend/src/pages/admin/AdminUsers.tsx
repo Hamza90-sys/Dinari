@@ -11,14 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useRequests } from "@/hooks/use-requests";
 import { useUsersData } from "@/hooks/use-users-data";
-import { usePayments } from "@/hooks/use-payments";
+import { useWallet } from "@/hooks/use-wallet";
 import { useMemo, useState } from "react";
 import type { Profile } from "@/types/domain";
 
 export default function AdminUsers() {
   const { profiles } = useUsersData();
   const { requests } = useRequests();
-  const { payments } = usePayments();
+  const { walletTransactions } = useWallet();
 
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "user">("all");
@@ -32,12 +32,12 @@ export default function AdminUsers() {
       .filter((u) => (q ? u.email.toLowerCase().includes(q) || (u.fullName || "").toLowerCase().includes(q) : true))
       .map((u) => {
         const reqCount = requests.filter((r) => r.ownerId === u.id).length;
-        const spent = payments
-          .filter((p) => p.ownerId === u.id && p.requestId && p.status === "Completed")
-          .reduce((sum, p) => sum + p.amountTND, 0);
+        const spent = walletTransactions
+          .filter((tx) => tx.userId === u.id && tx.type === "service_purchase")
+          .reduce((sum, tx) => sum + tx.amountTND, 0);
         return { user: u, reqCount, spent };
       });
-  }, [profiles, query, roleFilter, requests, payments]);
+  }, [profiles, query, roleFilter, requests, walletTransactions]);
 
   return (
     <AdminShell title="Users" subtitle="View user accounts, roles, and spending behavior">
@@ -118,9 +118,9 @@ export default function AdminUsers() {
               <Detail label="Requests" value={String(requests.filter((r) => r.ownerId === selectedUser.id).length)} />
               <Detail
                 label="Total spent"
-                value={`${payments
-                  .filter((p) => p.ownerId === selectedUser.id && p.requestId && p.status === "Completed")
-                  .reduce((sum, p) => sum + p.amountTND, 0)
+                value={`${walletTransactions
+                  .filter((tx) => tx.userId === selectedUser.id && tx.type === "service_purchase")
+                  .reduce((sum, tx) => sum + tx.amountTND, 0)
                   .toFixed(2)} TND`}
               />
             </div>

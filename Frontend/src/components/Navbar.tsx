@@ -13,19 +13,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const links = [
-  { to: "/", label: "Home" },
-  { to: "/services", label: "Services" },
-  { to: "/request", label: "Request" },
-  { to: "/dashboard", label: "Dashboard" },
-];
+import { toast } from "sonner";
 
 export const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
+
+  const links = isAdmin
+    ? [{ to: "/admin", label: "Dashboard" }]
+    : [
+        { to: "/", label: "Home" },
+        { to: "/services", label: "Services" },
+        { to: "/request", label: "Request" },
+        { to: "/dashboard", label: "Dashboard" },
+      ];
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -43,8 +46,13 @@ export const Navbar = () => {
       .join("") || "?";
 
   const onSignOut = async () => {
-    await signOut();
-    navigate("/");
+    try {
+      await signOut();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Sign out failed.");
+    } finally {
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
@@ -90,11 +98,11 @@ export const Navbar = () => {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link to="/dashboard" className="cursor-pointer">
+                  <Link to={isAdmin ? "/admin" : "/dashboard"} className="cursor-pointer">
                     <LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard
                   </Link>
                 </DropdownMenuItem>
-                {profile?.role === "admin" && (
+                {isAdmin && (
                   <DropdownMenuItem asChild>
                     <Link to="/admin" className="cursor-pointer">
                       <LayoutDashboard className="mr-2 h-4 w-4" /> Admin panel
@@ -143,7 +151,7 @@ export const Navbar = () => {
                 {l.label}
               </NavLink>
             ))}
-            {profile?.role === "admin" && (
+            {isAdmin && (
               <NavLink
                 to="/admin"
                 onClick={() => setOpen(false)}

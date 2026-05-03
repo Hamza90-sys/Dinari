@@ -8,14 +8,39 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { toast } from "sonner";
 import { usePayments } from "@/hooks/use-payments";
+import { useWallet } from "@/hooks/use-wallet";
+import { walletService } from "@/services/wallet.service";
+import { useAuth } from "@/hooks/use-auth";
 
 const QUICK = [50, 100, 200, 500];
 
+const PAYMENT_INSTRUCTIONS = {
+  D17: {
+    title: "Send payment to",
+    details: ["D17 Number: XX XXX XXX", "Name: Dinari Payments"],
+    note: "Send the exact amount shown above.",
+  },
+  "Bank Transfer": {
+    title: "Bank transfer details",
+    details: ["Bank: Bank Name", "RIB/IBAN: TN00 0000 0000 0000 0000 0000", "Account holder: Dinari Payments"],
+    note: "Please include the exact amount and keep your receipt.",
+  },
+  Flouci: {
+    title: "Send payment to",
+    details: ["Flouci ID: XX XXX XXX", "Name: Dinari Payments"],
+    note: "Send the exact amount shown above.",
+  },
+} as const;
+
 type Mode = "topup" | "withdraw";
+type TopUpStep = "details" | "proof";
+const ALLOWED_PROOF_TYPES = new Set(["image/jpeg", "image/png", "application/pdf"]);
+const MAX_PROOF_SIZE_BYTES = 10 * 1024 * 1024;
 
 export const MoneyDialog = ({
   mode,
@@ -30,15 +55,25 @@ export const MoneyDialog = ({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) => {
-  const { topUp, withdraw } = usePayments();
+  const { withdraw } = usePayments();
+  const { createPaymentRequest } = useWallet();
+  const { user } = useAuth();
   const [amount, setAmount] = useState<string>("");
-  const [method, setMethod] = useState<"D17" | "Bank transfer" | "Card">("D17");
+  const [method, setMethod] = useState<"D17" | "Bank Transfer" | "Flouci">("D17");
+  const [step, setStep] = useState<TopUpStep>("details");
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [transactionReference, setTransactionReference] = useState("");
+  const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setAmount("");
       setMethod("D17");
+      setStep("details");
+      setProofFile(null);
+      setTransactionReference("");
+      setNote("");
     }
   }, [open, mode]);
 
@@ -53,8 +88,32 @@ export const MoneyDialog = ({
     setSubmitting(true);
     try {
       if (isTopUp) {
-        await topUp(numeric, method);
-        toast.success(`Top-up of ${numeric} TND received`);
+        if (!user) {
+          toast.error("Please sign in first.");
+          return;
+        }
+        if (!proofFile) {
+          toast.error("Please upload your payment proof.");
+          return;
+        }
+        if (!ALLOWED_PROOF_TYPES.has(proofFile.type)) {
+          toast.error("Proof must be JPG, PNG, or PDF.");
+          return;
+        }
+        if (proofFile.size > MAX_PROOF_SIZE_BYTES) {
+          toast.error("Proof file must be 10 MB or smaller.");
+          return;
+        }
+
+        const proofPath = await walletService.uploadTopUpProof(proofFile, user.id);
+        await createPaymentRequest({
+          amount: numeric,
+          method,
+          transactionReference: transactionReference.trim() || undefined,
+          screenshotUrl: proofPath,
+          note: note.trim() || undefined,
+        });
+        toast.success("Your payment is awaiting manual verification.");
       } else {
         await withdraw(numeric);
         toast.success(`Withdrew ${numeric} TND`);
@@ -121,11 +180,11 @@ export const MoneyDialog = ({
             )}
           </div>
 
-          {isTopUp && (
+          {isTopUp && step === "details" && (
             <div className="space-y-2">
               <Label>Payment method</Label>
               <div className="grid grid-cols-3 gap-2">
-                {(["D17", "Bank transfer", "Card"] as const).map((m) => (
+                {(["D17", "Bank Transfer", "Flouci"] as const).map((m) => (
                   <button
                     type="button"
                     key={m}
@@ -143,20 +202,91 @@ export const MoneyDialog = ({
             </div>
           )}
 
-          <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/40 px-4 py-3 text-sm">
-            <span className="text-muted-foreground">New balance</span>
-            <span className="font-display text-base font-semibold">
-              {(isTopUp ? balance + (numeric || 0) : balance - (numeric || 0)).toFixed(2)} TND
-            </span>
-          </div>
+          {isTopUp && step === "details" && (
+            <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {PAYMENT_INSTRUCTIONS[method].title}
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-foreground">
+                {PAYMENT_INSTRUCTIONS[method].details.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+                <li className="font-semibold">Exact amount: {(numeric || 0).toFixed(2)} TND</li>
+              </ul>
+              <p className="mt-2 text-xs text-muted-foreground">{PAYMENT_INSTRUCTIONS[method].note}</p>
+            </div>
+          )}
+
+          {isTopUp && step === "proof" && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="proof">Upload payment proof</Label>
+                <Input
+                  id="proof"
+                  type="file"
+                  accept="image/png,image/jpeg,application/pdf"
+                  onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+                />
+                <p className="text-xs text-muted-foreground">Accepted formats: JPG, PNG, PDF up to 10 MB.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reference">Transaction reference</Label>
+                <Input
+                  id="reference"
+                  value={transactionReference}
+                  onChange={(e) => setTransactionReference(e.target.value)}
+                  placeholder="e.g. D17-839201"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="note">Note (optional)</Label>
+                <Textarea
+                  id="note"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Add anything that helps us verify the payment"
+                  rows={3}
+                />
+              </div>
+              <div className="rounded-2xl border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+                Your balance updates only after manual approval.
+              </div>
+            </div>
+          )}
+
+          {!isTopUp && (
+            <div className="flex items-center justify-between rounded-2xl border border-border bg-muted/40 px-4 py-3 text-sm">
+              <span className="text-muted-foreground">New balance</span>
+              <span className="font-display text-base font-semibold">
+                {(balance - (numeric || 0)).toFixed(2)} TND
+              </span>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="hero" disabled={!valid || submitting}>
-              {isTopUp ? "Confirm top-up" : "Confirm withdrawal"}
-            </Button>
+            {isTopUp ? (
+              step === "details" ? (
+                <Button
+                  type="button"
+                  variant="hero"
+                  disabled={!valid}
+                  onClick={() => setStep("proof")}
+                >
+                  I have sent the payment
+                </Button>
+              ) : (
+                <Button type="submit" variant="hero" disabled={!valid || submitting}>
+                  Submit for verification
+                </Button>
+              )
+            ) : (
+              <Button type="submit" variant="hero" disabled={!valid || submitting}>
+                Confirm withdrawal
+              </Button>
+            )}
           </div>
         </form>
       </DialogContent>

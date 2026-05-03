@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
 
 const groups = [
   {
@@ -53,8 +54,13 @@ export const AppSidebar = () => {
   const collapsed = state === "collapsed";
 
   const doSignOut = async () => {
-    await signOut();
-    navigate("/");
+    try {
+      await signOut();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Sign out failed.");
+    } finally {
+      navigate("/login", { replace: true });
+    }
   };
 
   return (

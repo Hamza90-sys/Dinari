@@ -92,12 +92,12 @@ export const paymentsService = {
   async attachProofToRequestCode(requestCode: string, file: File, userId: string) {
     const { data: requestRow, error: requestError } = await supabase
       .from("requests")
-      .select("id")
+      .select("id, user_id, amount_tnd")
       .eq("request_code", requestCode)
       .single();
     if (requestError) throw new Error(requestError.message);
 
-    const { data: paymentRow, error: paymentError } = await supabase
+    const { data: latestPaymentRow, error: paymentError } = await supabase
       .from("payments")
       .select("id")
       .eq("request_id", requestRow.id)
@@ -105,10 +105,27 @@ export const paymentsService = {
       .limit(1)
       .maybeSingle();
     if (paymentError) throw new Error(paymentError.message);
-    if (!paymentRow) throw new Error("No payment record found for this request yet.");
+
+    let paymentId = latestPaymentRow?.id ?? null;
+    if (!paymentId) {
+      const { data: insertedPayment, error: insertError } = await supabase
+        .from("payments")
+        .insert({
+          request_id: requestRow.id,
+          user_id: requestRow.user_id,
+          amount_tnd: requestRow.amount_tnd,
+          payment_method: "Manual Proof",
+          status: "Pending",
+        })
+        .select("id")
+        .single();
+
+      if (insertError) throw new Error(insertError.message);
+      paymentId = insertedPayment.id;
+    }
 
     const proofPath = await paymentsService.uploadProof(file, userId);
-    await paymentsService.attachProofToPayment(paymentRow.id, proofPath);
+    await paymentsService.attachProofToPayment(paymentId, proofPath);
     return proofPath;
   },
 };

@@ -8,16 +8,25 @@ export const ProtectedRoute = ({
   children: React.ReactNode;
   requireAdmin?: boolean;
 }) => {
-  const { user, profile, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="grid min-h-[60vh] place-items-center text-sm text-muted-foreground">
+        Loading dashboard...
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
-  if (requireAdmin && profile?.role !== "admin") {
+  if (requireAdmin && !isAdmin) {
     return <Navigate to="/dashboard" replace />;
+  }
+  if (!requireAdmin && isAdmin && location.pathname === "/dashboard") {
+    return <Navigate to="/admin" replace />;
   }
   return <>{children}</>;
 };

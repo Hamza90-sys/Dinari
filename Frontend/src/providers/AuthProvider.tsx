@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { authService } from "@/services/auth.service";
+import { isAdminEmail } from "@/lib/admin";
 import type { Profile } from "@/types/domain";
 
 type AuthContextValue = {
@@ -30,12 +31,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const nextProfile = await authService.getProfile(nextUser.id);
-    setProfile(nextProfile);
+    try {
+      const nextProfile = await authService.getProfile(nextUser.id);
+      setProfile(nextProfile);
+    } catch {
+      setProfile(null);
+    }
   };
 
   useEffect(() => {
     let mounted = true;
+    const fallbackTimer = window.setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 7000);
 
     const bootstrap = async () => {
       try {
@@ -44,6 +52,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(initialSession);
         setUser(initialSession?.user ?? null);
         await syncProfile(initialSession?.user ?? null);
+      } catch {
+        if (!mounted) return;
+        setSession(null);
+        setUser(null);
+        setProfile(null);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -52,13 +65,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     bootstrap();
 
     const { data: subscription } = authService.onAuthStateChange(async (_event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-      await syncProfile(nextSession?.user ?? null);
+      try {
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
+        await syncProfile(nextSession?.user ?? null);
+      } catch {
+        setProfile(null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     });
 
     return () => {
       mounted = false;
+      window.clearTimeout(fallbackTimer);
       subscription.subscription.unsubscribe();
     };
   }, []);
@@ -70,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profile,
       loading,
       isAuthenticated: !!user,
-      isAdmin: profile?.role === "admin",
+      isAdmin: profile?.role === "admin" || isAdminEmail(user?.email),
       signIn: async (email, password) => {
         await authService.signIn({ email, password });
       },

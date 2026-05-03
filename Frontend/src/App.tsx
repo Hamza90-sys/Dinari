@@ -9,6 +9,9 @@ import Services from "./pages/Services.tsx";
 import RequestPayment from "./pages/RequestPayment.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Login from "./pages/Login.tsx";
+import CheckoutPage from "./pages/CheckoutPage.tsx";
+import PaymentSuccess from "./pages/PaymentSuccess.tsx";
+import PaymentFailed from "./pages/PaymentFailed.tsx";
 import AdminOverview from "./pages/admin/AdminOverview.tsx";
 import AdminRequests from "./pages/admin/AdminRequests.tsx";
 import AdminPayments from "./pages/admin/AdminPayments.tsx";
@@ -33,6 +36,31 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          {/* Payment Flow Routes */}
+          <Route
+            path="/checkout"
+            element={
+              <ProtectedRoute>
+                <CheckoutPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/payment-success"
+            element={
+              <ProtectedRoute>
+                <PaymentSuccess />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/payment-failed"
+            element={
+              <ProtectedRoute>
+                <PaymentFailed />
               </ProtectedRoute>
             }
           />

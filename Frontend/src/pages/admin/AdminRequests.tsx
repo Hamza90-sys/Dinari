@@ -19,7 +19,13 @@ import { Input } from "@/components/ui/input";
 import { useRequests } from "@/hooks/use-requests";
 import { type DinariRequest, type RequestStatus } from "@/types/domain";
 
-const statuses: RequestStatus[] = ["Awaiting Payment", "Paid", "Processing", "Completed", "Failed"];
+const transitions: Record<RequestStatus, RequestStatus[]> = {
+  "Awaiting Payment": ["Paid", "Failed"],
+  Paid: ["Processing", "Failed"],
+  Processing: ["Completed", "Failed"],
+  Completed: [],
+  Failed: ["Processing"],
+};
 
 export default function AdminRequests() {
   const { requests, setRequestStatus, deleteRequest } = useRequests();
@@ -96,7 +102,7 @@ export default function AdminRequests() {
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" onClick={() => setSelected(r)}>View Details</Button>
-                        {statuses.filter((s) => s !== r.status).map((status) => (
+                        {transitions[r.status].map((status) => (
                           <Button
                             key={status}
                             size="sm"

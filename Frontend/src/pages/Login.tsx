@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
-import { ShieldCheck, Sparkles } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { ADMIN_EMAIL, ADMIN_FULL_NAME, isAdminEmail } from "@/lib/admin";
+import { authService } from "@/services/auth.service";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ const Login = () => {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -36,7 +39,9 @@ const Login = () => {
         toast.success("Account created");
       }
 
-      if (email.toLowerCase().trim() === "admin@dinari.tn") {
+      const currentUser = await authService.getCurrentUser();
+      const currentProfile = currentUser ? await authService.getProfile(currentUser.id) : null;
+      if (currentProfile?.role === "admin" || isAdminEmail(email)) {
         navigate("/admin", { replace: true });
       } else {
         navigate(from, { replace: true });
@@ -49,8 +54,9 @@ const Login = () => {
   };
 
   const fillDemo = () => {
-    setEmail("admin@dinari.tn");
-    setPassword("admin123");
+    setName(ADMIN_FULL_NAME);
+    setEmail(ADMIN_EMAIL);
+    setPassword("");
     setMode("signin");
   };
 
@@ -89,7 +95,7 @@ const Login = () => {
                 type="button"
                 className="mt-8 inline-flex items-center gap-2 rounded-full border border-dashed border-border bg-background/60 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
               >
-                Use demo admin account
+                Prefill admin account
               </button>
             </div>
 
@@ -123,7 +129,7 @@ const Login = () => {
                       id="name"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="Yassine Abidi"
+                      placeholder="Your name"
                       className="h-12 rounded-xl"
                     />
                   </div>
@@ -142,15 +148,25 @@ const Login = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="********"
-                    className="h-12 rounded-xl"
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="********"
+                      className="h-12 rounded-xl pr-12"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute inset-y-0 right-0 grid w-12 place-items-center text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <Button type="submit" variant="hero" size="lg" className="w-full" disabled={loading}>

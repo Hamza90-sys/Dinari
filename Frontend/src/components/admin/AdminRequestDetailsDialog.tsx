@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import type { DinariRequest } from "@/types/domain";
-import { Check, Clock, ImagePlus, Save } from "lucide-react";
+import { Check, Clock, ImagePlus, Save, Eye, Copy, MessageCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -37,9 +37,11 @@ export function AdminRequestDetailsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { setAdminNotes, setRequestProof } = useRequests();
+  const { setAdminNotes, setRequestProof, revealPassword } = useRequests();
   const [notes, setNotes] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [passwordValue, setPasswordValue] = useState<string | null>(null);
+  const [revealing, setRevealing] = useState(false);
 
   const statusStep = request ? timelineIndex(request.status) : 0;
   const amount = request?.amountTND ?? 0;
@@ -47,6 +49,10 @@ export function AdminRequestDetailsDialog({
   useEffect(() => {
     setNotes(request?.adminNotes ?? "");
   }, [request?.id, request?.adminNotes]);
+
+  useEffect(() => {
+    setPasswordValue(null);
+  }, [request?.id, open]);
 
   useEffect(() => {
     let mounted = true;
@@ -62,7 +68,7 @@ export function AdminRequestDetailsDialog({
         if (mounted) setPreviewUrl(null);
       }
     };
-    loadProof();
+    void loadProof();
     return () => {
       mounted = false;
     };
@@ -87,6 +93,34 @@ export function AdminRequestDetailsDialog({
     }
   };
 
+  const onRevealPassword = async () => {
+    if (!request || request.accountAccessType !== "existing") return;
+    try {
+      setRevealing(true);
+      const value = await revealPassword(request.id);
+      if (!value) {
+        toast.error("No password stored for this request.");
+        return;
+      }
+      setPasswordValue(value);
+      toast.success("Password revealed");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Could not reveal password.");
+    } finally {
+      setRevealing(false);
+    }
+  };
+
+  const onCopyPhone = async () => {
+    if (!request?.phoneNumber) return;
+    try {
+      await navigator.clipboard.writeText(request.phoneNumber);
+      toast.success("Phone number copied");
+    } catch {
+      toast.error("Could not copy phone number");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-3xl">
@@ -108,6 +142,7 @@ export function AdminRequestDetailsDialog({
               <p><span className="text-muted-foreground">Service:</span> {request.service}</p>
               <p><span className="text-muted-foreground">Plan:</span> {request.plan}</p>
               <p><span className="text-muted-foreground">Account email:</span> {request.email}</p>
+              <p><span className="text-muted-foreground">Account access:</span> {request.accountAccessType ?? "existing"}</p>
               <p><span className="text-muted-foreground">Notes:</span> {request.notes || "-"}</p>
             </div>
           </section>
@@ -138,6 +173,73 @@ export function AdminRequestDetailsDialog({
               );
             })}
           </ol>
+        </section>
+
+        <section className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="mb-3 text-sm font-semibold">Account Access</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Access type</p>
+                <p className="font-medium">{request.accountAccessType ?? "existing"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Account email</p>
+                <p className="font-medium">{request.email}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Password</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-mono text-xs text-muted-foreground">
+                    {passwordValue ? passwordValue : "********"}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onRevealPassword}
+                    disabled={revealing || request.accountAccessType !== "existing"}
+                  >
+                    <Eye className="h-4 w-4" /> Reveal password
+                  </Button>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Encrypted at rest. Reveal actions are logged for audit.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="mb-3 text-sm font-semibold">Contact & Verification</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">Phone number</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{request.phoneNumber || "-"}</p>
+                  {request.phoneNumber && (
+                    <Button size="sm" variant="outline" onClick={onCopyPhone}>
+                      <Copy className="h-4 w-4" /> Copy
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Preferred method</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-medium">{request.preferredContactMethod || "-"}</p>
+                  {request.preferredContactMethod === "WhatsApp" && request.phoneNumber && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => window.open(`https://wa.me/${request.phoneNumber.replace(/\D/g, "")}`, "_blank", "noopener,noreferrer")}
+                    >
+                      <MessageCircle className="h-4 w-4" /> WhatsApp
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2">

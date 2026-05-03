@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { Bell, LayoutDashboard, ListTodo, Receipt, Users, LogOut } from "lucide-react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const navItems = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard, end: true },
@@ -17,8 +18,13 @@ export function AdminShell({ title, subtitle, children }: { title: string; subti
   const navigate = useNavigate();
 
   const onSignOut = async () => {
-    await signOut();
-    navigate("/");
+    try {
+      await signOut();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Sign out failed.");
+    } finally {
+      navigate("/login", { replace: true });
+    }
   };
 
   return (
@@ -69,9 +75,6 @@ export function AdminShell({ title, subtitle, children }: { title: string; subti
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" className="rounded-full">
                 <Bell className="h-4 w-4" />
-              </Button>
-              <Button variant="hero" size="sm" asChild>
-                <Link to="/dashboard">User dashboard</Link>
               </Button>
             </div>
           </header>

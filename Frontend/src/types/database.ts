@@ -187,6 +187,13 @@ export type Database = {
         };
         Returns: undefined;
       };
+      admin_set_request_notes: {
+        Args: {
+          p_request_code: string;
+          p_admin_notes: string;
+        };
+        Returns: undefined;
+      };
       get_user_role: {
         Args: Record<PropertyKey, never>;
         Returns: "user" | "admin";
